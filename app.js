@@ -1,49 +1,70 @@
-function fetchMockTelemetryData() {
-    const mockData = {
-        temperature: { ts: Date.now(), value: (Math.random() * 40).toFixed(1) },
-        humidity: { ts: Date.now(), value: (Math.random() * 100).toFixed(0) },
-        alarms: Math.random() > 0.7 ? [
-            { message: "High Temperature Alert", timestamp: Date.now() }
-        ] : []
-    };
+const tempEl = document.getElementById('temp-value');
+const alarmsEl = document.getElementById('alarms-list');
 
-    const temp = parseFloat(mockData.temperature.value);
-    const hum = parseInt(mockData.humidity.value);
-    const timestamp = new Date(mockData.temperature.ts).toLocaleTimeString();
+const ctx = document.getElementById('humidityChart').getContext('2d');
+const humidityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Humidity (%)',
+            data: [],
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+            tension: 0.3,
+            fill: true
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { labels: { color: '#ffffff' } }
+        },
+        scales: {
+            x: { 
+                ticks: { color: '#ffffff' }, 
+                title: { display: true, text: 'Time', color: '#ffffff' } 
+            },
+            y: { 
+                min: 0, max: 100,
+                ticks: { color: '#ffffff' }, 
+                title: { display: true, text: 'Humidity (%)', color: '#ffffff' }
+            }
+        }
+    }
+});
 
-    tempGauge.refresh(temp);
+function generateMockData() {
+    const temp = (Math.random() * 40).toFixed(1);
+    const humidity = (Math.random() * 100).toFixed(0);
+    const time = new Date().toLocaleTimeString();
+
+    tempEl.textContent = `${temp} °C`;
 
     if (humidityChart.data.labels.length > 10) {
         humidityChart.data.labels.shift();
         humidityChart.data.datasets[0].data.shift();
     }
 
-    humidityChart.data.labels.push(timestamp);
-    humidityChart.data.datasets[0].data.push(hum);
+    humidityChart.data.labels.push(time);
+    humidityChart.data.datasets[0].data.push(humidity);
     humidityChart.update();
 
-    updateAlarms(mockData.alarms);
-}
+    const showAlarm = Math.random() > 0.7;
 
-function updateAlarms(alarmsData) {
-    const alarmsContainer = document.getElementById('alarms-list');
-    alarmsContainer.innerHTML = '';
-
-    if (!alarmsData || alarmsData.length === 0) {
-        alarmsContainer.innerHTML = '<p class="text-green-600">All systems normal ✅</p>';
-        return;
+    if (showAlarm) {
+        const alarmDiv = document.createElement('div');
+        alarmDiv.className = 'bg-red-600 text-white p-3 rounded shadow fade-in';
+        alarmDiv.textContent = `🔥 High Temp Alert at ${time}`;
+        alarmsEl.prepend(alarmDiv);
     }
 
-    alarmsData.forEach(alarm => {
-        const alarmEl = document.createElement('div');
-        alarmEl.className = 'bg-red-100 p-3 rounded-lg mb-2 text-red-800';
-        alarmEl.textContent = `⚠️ ${alarm.message} at ${new Date(alarm.timestamp).toLocaleTimeString()}`;
-        alarmsContainer.appendChild(alarmEl);
-    });
+    if (alarmsEl.children.length === 0) {
+        alarmsEl.innerHTML = '<p class="text-green-400">All systems normal ✅</p>';
+    }
 }
 
 window.addEventListener('load', () => {
-    initializeDashboard();
-    fetchMockTelemetryData();
-    setInterval(fetchMockTelemetryData, 5000);
+    generateMockData();
+    setInterval(generateMockData, 5000);
 });
