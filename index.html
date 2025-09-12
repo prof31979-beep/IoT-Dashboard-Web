@@ -31,6 +31,7 @@
             <a href="#" class="hover:text-indigo-400">Settings</a>
             <a href="#" class="hover:text-indigo-400">Help</a>
         </div>
+        <div id="clock" class="text-indigo-300 font-mono"></div>
     </nav>
 
     <!-- Main Content -->
@@ -38,13 +39,16 @@
 
         <h1 class="text-3xl font-bold text-center">📈 Real-Time Monitoring</h1>
 
-        <!-- Dashboard Panels -->
         <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            <!-- Temperature Card -->
+            <!-- Temperature Gauge Card -->
             <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col items-center fade-in">
                 <h2 class="text-xl font-semibold mb-4">🌡️ Temperature</h2>
-                <div class="text-5xl font-bold text-indigo-400" id="temp-value">-- °C</div>
+
+                <!-- Gauge Container -->
+                <div id="gauge" class="w-48 h-48"></div>
+
+                <div class="text-2xl font-bold text-indigo-400 mt-4" id="temp-value">-- °C</div>
             </div>
 
             <!-- Humidity Chart Card -->
@@ -55,7 +59,7 @@
 
         </section>
 
-        <!-- Alarms Section -->
+        <!-- System Alarms -->
         <section class="bg-gray-800 rounded-lg shadow-lg p-6 fade-in">
             <h2 class="text-xl font-semibold mb-4">⚠️ System Alarms</h2>
             <div id="alarms-list" class="space-y-3">
@@ -65,13 +69,11 @@
 
     </main>
 
-    <!-- Footer -->
     <footer class="bg-gray-800 text-center p-4 mt-12 text-gray-500">
         &copy; 2025 Pro IoT Monitoring Dashboard
     </footer>
 
-    <!-- Link to External JS -->
     <script src="app.js"></script>
-
 </body>
+
 </html>
