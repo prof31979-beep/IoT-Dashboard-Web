@@ -1,81 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>IoT Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="app.js" defer></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IoT Dashboard — Live & Simulate</title>
+
+  <!-- Chart.js (required) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Tailwind CDN for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Small custom adjustments */
+    body {
+      background: linear-gradient(180deg,#0f172a 0%, #111827 60%);
+      -webkit-font-smoothing: antialiased;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    .card { background: linear-gradient(180deg,#111827, #0b1220); border-radius: 12px; box-shadow: 0 6px 24px rgba(2,6,23,0.6); padding: 18px; }
+    .muted { color: #9CA3AF; }
+    .status-live { color: #34D399; }
+    .status-sim { color: #FBBF24; }
+  </style>
 </head>
+<body class="text-white min-h-screen">
 
-<body class="bg-gray-900 text-white min-h-screen font-sans">
-
-    <!-- Navbar -->
-    <nav class="bg-gray-800 shadow-lg p-4 flex justify-between items-center">
-        <h1 class="text-2xl font-bold text-indigo-400">IoT Monitoring Dashboard</h1>
-        <div id="clock" class="font-mono text-lg"></div>
-    </nav>
-
-    <main class="p-6 space-y-6">
-
-        <!-- Data Cards Grid -->
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            <!-- Temperature Card -->
-            <div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center fade-in">
-                <h2 class="text-xl font-semibold mb-4">🌡️ Temperature</h2>
-                <div id="gauge" class="w-48 h-48 mx-auto"></div>
-                <div class="text-2xl font-bold text-indigo-400 mt-4" id="temp-value">-- °C</div>
-            </div>
-
-            <!-- Humidity Card -->
-            <div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center fade-in">
-                <h2 class="text-xl font-semibold mb-4">💧 Humidity</h2>
-                <canvas id="humidityChart"></canvas>
-            </div>
-
-            <!-- Vibration Card -->
-            <div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center fade-in">
-                <h2 class="text-xl font-semibold mb-4">🔧 Vibration</h2>
-                <div id="vibration-value" class="text-2xl font-bold text-indigo-400">-- m/s²</div>
-            </div>
-
-           <!-- GPS Coordinates Card with Google Map -->
-<div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center fade-in">
-    <h2 class="text-xl font-semibold mb-4">📍 GPS Location</h2>
-    <div id="gps-map" class="w-full h-48 rounded-lg overflow-hidden shadow-md">
-        <iframe
-            id="gps-iframe"
-            width="100%"
-            height="100%"
-            frameborder="0"
-            style="border:0"
-            src="https://maps.google.com/maps?q=0,0&z=15&output=embed"
-            allowfullscreen>
-        </iframe>
+  <!-- NAV -->
+  <nav class="flex items-center justify-between px-6 py-4">
+    <div class="flex items-center gap-3">
+      <div class="text-2xl font-semibold">📡 IoT Dashboard</div>
+      <div class="ml-4 text-sm muted">Prototype</div>
     </div>
-    <div id="gps-value" class="text-indigo-300 font-mono mt-2">Lat: --, Lng: --</div>
-</div>
 
+    <div class="flex items-center gap-4">
+      <div id="statusIndicator" class="text-sm muted">Mode: <span id="modeLabel">Simulate</span></div>
 
-            <!-- Alarm Summary Card -->
-            <div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center fade-in">
-                <h2 class="text-xl font-semibold mb-4">⚠️ Latest Alarm</h2>
-                <div id="alarm-summary" class="text-red-400 font-bold">All systems normal ✅</div>
-            </div>
+      <label class="flex items-center gap-2">
+        <input id="modeToggle" type="checkbox" class="toggle-checkbox" />
+        <span class="text-sm muted">Live</span>
+      </label>
 
-        </section>
+      <div id="clock" class="text-sm muted"></div>
+    </div>
+  </nav>
 
-        <!-- Alarm Detailed List -->
-        <section>
-            <h2 class="text-2xl font-semibold mb-4">🚨 Active Alarms</h2>
-            <div id="alarms-list" class="space-y-3"></div>
-        </section>
+  <!-- MAIN GRID -->
+  <main class="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-    </main>
+    <!-- Temperature card -->
+    <section class="card col-span-1 lg:col-span-1">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-medium">🌡 Temperature</h3>
+        <div class="muted text-sm">°C</div>
+      </div>
+
+      <div class="flex flex-col items-center">
+        <canvas id="temperatureGauge" width="260" height="160"></canvas>
+        <div id="temperatureNumeric" class="mt-3 text-2xl font-semibold">-- °C</div>
+        <div id="tempRange" class="muted text-sm mt-1">Range 0 — 50°C</div>
+      </div>
+    </section>
+
+    <!-- Humidity card -->
+    <section class="card col-span-1 lg:col-span-1">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-medium">💧 Humidity</h3>
+        <div class="muted text-sm">%</div>
+      </div>
+      <canvas id="humidityChart" height="160"></canvas>
+    </section>
+
+    <!-- Vibration & Map column -->
+    <div class="space-y-6 lg:col-span-1">
+
+      <!-- Vibration -->
+      <div class="card">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-medium">🔧 Vibration</h3>
+          <div class="muted text-sm">m/s²</div>
+        </div>
+        <div class="mt-4 text-3xl font-semibold" id="vibrationValue">--</div>
+        <div class="muted text-sm mt-1">Current RMS / instant reading</div>
+      </div>
+
+      <!-- GPS/map -->
+      <div class="card">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-lg font-medium">📍 Device Location</h3>
+          <div class="muted text-sm" id="gpsText">Lat: -- , Lon: --</div>
+        </div>
+        <div id="map" class="w-full h-56 rounded" style="background:#0b1220;"></div>
+      </div>
+
+    </div>
+
+    <!-- Alarms / Controls full width -->
+    <section class="card col-span-1 lg:col-span-3">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-medium">⚠️ Alarms</h3>
+
+        <div class="flex items-center gap-3">
+          <label class="muted text-sm">Interval</label>
+          <select id="intervalSelect" class="bg-gray-800 rounded px-2 py-1 text-sm muted">
+            <option value="3000">3s</option>
+            <option value="5000" selected>5s</option>
+            <option value="10000">10s</option>
+          </select>
+          <button id="clearAlarms" class="bg-gray-700 px-3 py-1 rounded text-sm muted">Clear</button>
+        </div>
+      </div>
+
+      <div id="alarmsList" class="space-y-2 max-h-40 overflow-auto"></div>
+    </section>
+
+  </main>
+
+  <!-- App script (after Chart.js so Chart is available) -->
+  <script src="app.js"></script>
+
+  <!-- Google Maps loads after app.js; app.js exposes window.initMap -->
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBPoBn8-E6kSGT0Cn9rKxVME7P7_QFIoTo&callback=initMap">
+  </script>
 
 </body>
-
 </html>
