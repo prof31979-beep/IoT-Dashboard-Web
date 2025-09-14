@@ -1,4 +1,4 @@
-const accessToken = ''; // ThingsBoard access token (leave empty for simulation)
+const accessToken = 'Jup1c1SXSNiO6I0iuygg'; // ThingsBoard access token (leave empty for simulation)
 
 const modeToggle = document.getElementById('modeToggle');
 const modeLabel = document.getElementById('modeLabel');
@@ -222,3 +222,4 @@ document.addEventListener('DOMContentLoaded', () => {
   modeToggle.disabled = false;
   start();
 });
+
