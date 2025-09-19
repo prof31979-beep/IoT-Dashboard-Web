@@ -1,225 +1,330 @@
-const accessToken = 'Jup1c1SXSNiO6I0iuygg'; // ThingsBoard access token (leave empty for simulation)
-
-const modeToggle = document.getElementById('modeToggle');
-const modeLabel = document.getElementById('modeLabel');
-const statusIndicator = document.getElementById('statusIndicator');
-const intervalSelect = document.getElementById('intervalSelect');
-const clearAlarmsBtn = document.getElementById('clearAlarms');
-
-const temperatureNumeric = document.getElementById('temperatureNumeric');
-const vibrationValueEl = document.getElementById('vibrationValue');
-const gpsText = document.getElementById('gpsText');
-const alarmsList = document.getElementById('alarmsList');
-
-let isLive = false;
-let refreshMs = parseInt(intervalSelect.value, 10);
-let loopTimer = null;
-
-// CLOCK
-function startClock() {
-  const clk = document.getElementById('clock');
-  setInterval(() => {
-    clk.innerText = new Date().toLocaleTimeString();
-  }, 1000);
-}
-startClock();
-
-// Center-text plugin
-const centerTextPlugin = {
-  id: 'centerText',
-  beforeDraw(chart) {
-    if (chart.config.type !== 'doughnut') return;
-    const ctx = chart.ctx;
-    ctx.save();
-    const w = chart.width;
-    const h = chart.height;
-    ctx.font = `${Math.round(h / 8)}px sans-serif`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const value = chart.data.datasets[0].data[0];
-    ctx.fillText(`${value.toFixed(1)} °C`, w / 2, h / 1.6);
-    ctx.restore();
-  }
-};
-Chart.register(centerTextPlugin);
-
-// Temperature gauge
-const tempCtx = document.getElementById('temperatureGauge').getContext('2d');
-const temperatureGauge = new Chart(tempCtx, {
-  type: 'doughnut',
-  data: {
-    labels: ['temp', 'rest'],
-    datasets: [{ data: [0, 50], backgroundColor: ['#34D399', '#0f172a'], borderWidth: 0 }]
-  },
-  options: {
-    rotation: -90,
-    circumference: 180,
-    cutout: '72%',
-    responsive: true,
-    plugins: { legend: { display: false }, tooltip: { enabled: false } },
-    animation: { duration: 700 }
-  }
-});
-
-// Humidity chart
-const humCtx = document.getElementById('humidityChart').getContext('2d');
-const humidityChart = new Chart(humCtx, {
-  type: 'line',
-  data: { labels: [], datasets: [{ label: 'Humidity %', data: [], borderColor: '#60A5FA', tension: 0.25 }] },
-  options: {
-    responsive: true,
-    scales: { y: { min: 0, max: 100 }, x: { display: true } },
-    plugins: { legend: { display: false } }
-  }
-});
-
-// MAP
-let map, mapMarker;
-function initMap() {
-  const defaultPos = { lat: 28.6139, lng: 77.2090 };
-  map = new google.maps.Map(document.getElementById('map'), { center: defaultPos, zoom: 12 });
-  mapMarker = new google.maps.Marker({ position: defaultPos, map });
-  gpsText.innerText = `Lat: ${defaultPos.lat.toFixed(6)}, Lon: ${defaultPos.lng.toFixed(6)}`;
-}
-window.initMap = initMap;
-
-function updateMap(lat, lon) {
-  if (map && mapMarker) {
-    const pos = { lat, lng: lon };
-    gpsText.innerText = `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
-    map.setCenter(pos);
-    mapMarker.setPosition(pos);
-  }
-}
-
-// UI Mode handling
-function setMode(live) {
-  isLive = live && !!accessToken;
-  modeLabel.innerText = isLive ? 'Live' : 'Simulate';
-  const cls = isLive ? 'status-live' : 'status-sim';
-  statusIndicator.classList.toggle('status-live', isLive);
-  statusIndicator.classList.toggle('status-sim', !isLive);
-
-  if (live && !accessToken) {
-    alert('No ThingsBoard access token provided — using simulation.');
-    modeToggle.checked = false;
-    isLive = false;
-    modeLabel.innerText = 'Simulate';
-  }
-}
-
-modeToggle.addEventListener('change', (e) => setMode(e.target.checked));
-intervalSelect.addEventListener('change', () => {
-  refreshMs = parseInt(intervalSelect.value, 10);
-  restartLoop();
-});
-clearAlarmsBtn.addEventListener('click', () => { alarmsList.innerHTML = ''; });
-
-function pushAlarm(text) {
-  const el = document.createElement('div');
-  el.className = 'flex items-center justify-between bg-red-700 p-2 rounded';
-  el.innerHTML = `<div class="text-sm">${text}</div><button class="ml-3 px-2 py-1 bg-gray-800 rounded">Dismiss</button>`;
-  el.querySelector('button').onclick = () => el.remove();
-  alarmsList.prepend(el);
-  while (alarmsList.childElementCount > 8) alarmsList.removeChild(alarmsList.lastChild);
-}
-
-async function fetchThingsboardTelemetry() {
-  const keys = 'temperature,humidity,latitude,longitude,vibration,alarm';
-  const url = `https://thingsboard.cloud/api/v1/${accessToken}/telemetry/values/timeseries?keys=${keys}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const getVal = (k) => (json[k] && json[k].length > 0) ? json[k][0].value : null;
-    return {
-      temperature: parseFloat(getVal('temperature')),
-      humidity: parseFloat(getVal('humidity')),
-      latitude: parseFloat(getVal('latitude')),
-      longitude: parseFloat(getVal('longitude')),
-      vibration: parseFloat(getVal('vibration')),
-      alarm: getVal('alarm')
-    };
-  } catch (err) {
-    console.warn('ThingsBoard fetch failed:', err);
-    throw err;
-  }
-}
-
-function simulateTelemetry() {
-  const temperature = +(Math.random() * 45).toFixed(1);
-  const humidity = +(Math.random() * 100).toFixed(1);
-  const latitude = +(28.6139 + (Math.random()-0.5)*0.1).toFixed(6);
-  const longitude = +(77.2090 + (Math.random()-0.5)*0.1).toFixed(6);
-  const vibration = +(Math.random() * 10).toFixed(2);
-  const alarm = Math.random() > 0.9 ? 'High Temperature Detected!' : null;
-  return { temperature, humidity, latitude, longitude, vibration, alarm };
-}
-
-function applyTelemetry(data) {
-  const temp = (typeof data.temperature === 'number' && !isNaN(data.temperature)) ? Math.min(Math.max(data.temperature, 0), 50) : 0;
-  const color = temp > 30 ? '#EF4444' : (temp > 15 ? '#FBBF24' : '#34D399');
-  temperatureGauge.data.datasets[0].backgroundColor = [color, '#071025'];
-  temperatureGauge.data.datasets[0].data[0] = temp;
-  temperatureGauge.data.datasets[0].data[1] = Math.max(0, 50 - temp);
-  temperatureGauge.update();
-  temperatureNumeric.innerText = `${temp.toFixed(1)} °C`;
-
-  const now = new Date().toLocaleTimeString();
-  humidityChart.data.labels.push(now);
-  humidityChart.data.datasets[0].data.push(typeof data.humidity === 'number' ? data.humidity : 0);
-  if (humidityChart.data.labels.length > 30) {
-    humidityChart.data.labels.shift();
-    humidityChart.data.datasets[0].data.shift();
-  }
-  humidityChart.update();
-
-  vibrationValueEl.innerText = (typeof data.vibration === 'number') ? data.vibration.toFixed(2) : '--';
-
-  if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-    updateMap(data.latitude, data.longitude);
-  }
-
-  if (data.alarm) pushAlarm(data.alarm);
-}
-
-async function updateCycle() {
-  if (isLive && accessToken) {
-    try {
-      const tbData = await fetchThingsboardTelemetry();
-      const hasMeaningful = Object.values(tbData).some(v => v !== null);
-      if (!hasMeaningful) {
-        applyTelemetry(simulateTelemetry());
-      } else {
-        applyTelemetry(tbData);
-      }
-    } catch (err) {
-      applyTelemetry(simulateTelemetry());
-    }
-  } else {
-    applyTelemetry(simulateTelemetry());
-  }
-}
-
-function restartLoop() {
-  if (loopTimer) clearInterval(loopTimer);
-  loopTimer = setInterval(updateCycle, refreshMs);
-}
-
-function start() {
-  setModeFromToggle();
-  restartLoop();
-  updateCycle();
-}
-
-function setModeFromToggle() {
-  const checked = modeToggle.checked;
-  setMode(checked);
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-  modeToggle.disabled = false;
-  start();
-});
+  // Dark Mode
+  const darkModeToggle = document.getElementById('darkModeToggle');
+  darkModeToggle.addEventListener('change', () => {
+    document.body.classList.toggle('dark-mode', darkModeToggle.checked);
+  });
 
+  // Thresholds
+  const thresholds = JSON.parse(localStorage.getItem('customThresholds')) || {
+    tempMax: 28,
+    humidityMax: 80,
+    vibrationMax: 2
+  };
+  document.getElementById('tempThreshold').value = thresholds.tempMax;
+  document.getElementById('humidityThreshold').value = thresholds.humidityMax;
+  document.getElementById('vibrationThreshold').value = thresholds.vibrationMax;
+
+  document.getElementById('saveThresholdsBtn').addEventListener('click', () => {
+    thresholds.tempMax = parseFloat(document.getElementById('tempThreshold').value);
+    thresholds.humidityMax = parseFloat(document.getElementById('humidityThreshold').value);
+    thresholds.vibrationMax = parseFloat(document.getElementById('vibrationThreshold').value);
+    localStorage.setItem('customThresholds', JSON.stringify(thresholds));
+    simulateAlert('✅ Thresholds saved successfully!', 'success');
+  });
+
+  // Alerts
+  const alertsContainer = document.getElementById('alerts');
+  function simulateAlert(message, type = 'warning') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type}`;
+    alertDiv.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+    alertsContainer.prepend(alertDiv);
+    setTimeout(() => alertDiv.remove(), 10000);
+  }
+
+  // 🔹 Cooling System Modal
+  const coolingModal = new bootstrap.Modal(document.getElementById('coolingSystemModal'));
+  const coolingMessage = document.getElementById('coolingMessage');
+  const coolingProgress = document.getElementById('coolingProgress');
+  let coolingActive = false;
+  let alertCounts = { temp: 0 };
+  let cooledSensors = { temp: false };
+
+  function activateCooling(sensor) {
+    coolingActive = true;
+    alertCounts = { temp: 0, humidity: 0, vibration: 0 };
+
+    if (sensor === "Temperature") cooledSensors.temp = true;
+    
+    coolingMessage.textContent = `${sensor} exceeded threshold! Activating cooling system...`;
+    coolingProgress.style.width = "0%";
+    coolingProgress.textContent = "0%";
+    coolingModal.show();
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 100 / 30;
+      if (progress > 100) progress = 100;
+      coolingProgress.style.width = `${progress}%`;
+      coolingProgress.textContent = `${Math.round(progress)}%`;
+    }, 1000);
+
+    let coolingLoop = setInterval(() => {
+      if (sensor === "Temperature") {
+        currentTemp = Math.max(24, currentTemp - 0.1);
+        if (currentTemp <= 25) {
+          simulateAlert(`✅ Cooling complete for Temperature (${currentTemp.toFixed(1)}°C)`, 'success');
+          stopCooling();
+        }
+      }
+      
+    }, 1000);
+
+    function stopCooling() {
+      clearInterval(interval);
+      clearInterval(coolingLoop);
+      coolingModal.hide();
+      coolingActive = false;
+    }
+
+    setTimeout(stopCooling, 30000);
+  }
+
+  // Gradient Gauge Factory
+  function createGauge(ctx, gradientColors, max, initialValue, unit) {
+    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 200);
+    gradientColors.forEach(([pos, color]) => gradient.addColorStop(pos, color));
+
+    return new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [initialValue, max - initialValue],
+          backgroundColor: [gradient, 'rgba(220,220,220,0.2)'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        rotation: -90,
+        circumference: 180,
+        cutout: '70%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        },
+        animation: { animateRotate: true, animateScale: true }
+      },
+      plugins: [{
+        id: 'centerText',
+        beforeDraw(chart) {
+          const { width, height, ctx } = chart;
+          ctx.restore();
+          const fontSize = (height / 6).toFixed(2);
+          ctx.font = `${fontSize}px Arial`;
+          ctx.textBaseline = 'middle';
+          const value = chart.data.datasets[0].data[0].toFixed(1);
+          const text = `${value}${unit}`;
+          const textX = Math.round((width - ctx.measureText(text).width) / 2);
+          const textY = height / 1.4;
+          ctx.fillText(text, textX, textY);
+          ctx.save();
+        }
+      }]
+    });
+  }
+
+  // Gauges
+  const tempGauge = createGauge(
+    document.getElementById('temperatureGauge'),
+    [[0, "rgba(255,0,0,1)"], [1, "rgba(255,200,0,1)"]],
+    100, 27, "°C"
+  );
+
+  const humidityGauge = createGauge(
+    document.getElementById('humidityGauge'),
+    [[0, "rgba(0,123,255,1)"], [1, "rgba(0,200,150,1)"]],
+    100, 50, "%"
+  );
+
+  // Vibration Gauge (max = 5000 to handle sudden spikes)
+  const vibrationGauge = createGauge(
+    document.getElementById('vibrationGauge'),
+    [[0, "rgba(0,200,150,1)"], [1, "rgba(150,0,200,1)"]],
+    5000, 0.5, " m/s²"
+  );
+
+  // Waveform Historical Graph
+  const dataCtx = document.getElementById('dataChart').getContext('2d');
+  const dataChart = new Chart(dataCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: "rgba(255,99,132,1)",
+          borderWidth: 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "rgba(255,99,132,1)"
+        },
+        {
+          label: 'Humidity (%)',
+          data: [],
+          borderColor: "rgba(54,162,235,1)",
+          borderWidth: 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "rgba(54,162,235,1)"
+        },
+        {
+          label: 'Vibration (m/s²)',
+          data: [],
+          borderColor: "rgba(75,192,192,1)",
+          borderWidth: 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "rgba(75,192,192,1)"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: '#333', font: { size: 12 } }
+        },
+        tooltip: { enabled: true }
+      },
+      animation: { duration: 0 },
+      scales: {
+        x: {
+          display: true,
+          grid: { color: "rgba(200,200,200,0.2)" },
+          ticks: { color: '#666', autoSkip: false }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(200,200,200,0.2)" },
+          ticks: { color: '#666' }
+        }
+      }
+    }
+  });
+
+ // Sensor Simulation
+  let currentTemp = 27, currentHumidity = 81, currentVibration = 0.5; // default humidity ~81%
+  function simulateSensors() {
+    if (coolingActive) return; // pause normal updates during cooling
+
+    // Temperature
+    currentTemp = Math.min(28, Math.max(26, currentTemp + (Math.random() - 0.) * 10));
+    if (cooledSensors.temp) currentTemp = Math.min(currentTemp, thresholds.tempMax); // clamp after cooling
+    tempGauge.data.datasets[0].data[0] = currentTemp;
+    tempGauge.data.datasets[0].data[1] = 100 - currentTemp;
+    tempGauge.update();
+
+    // Humidity → controlled variation between 78–83%
+    currentHumidity += (Math.random() < 0.5 ? -1 : 1) * Math.random();
+    if (currentHumidity > 83) currentHumidity = 83;
+    if (currentHumidity < 78) currentHumidity = 78;
+    if (cooledSensors.humidity) currentHumidity = Math.min(currentHumidity, thresholds.humidityMax);
+    humidityGauge.data.datasets[0].data[0] = currentHumidity;
+    humidityGauge.data.datasets[0].data[1] = 100 - currentHumidity;
+    humidityGauge.update();
+
+    // Vibration → small baseline variations only
+    currentVibration = Math.min(5, Math.max(0, currentVibration + (Math.random() - 0.5) * 0.1));
+    if (cooledSensors.vibration) currentVibration = Math.min(currentVibration, thresholds.vibrationMax);
+    vibrationGauge.data.datasets[0].data[0] = currentVibration;
+    vibrationGauge.data.datasets[0].data[1] = 5000 - currentVibration;
+    vibrationGauge.update();
+
+    // Threshold checks
+    if (currentTemp > thresholds.tempMax) {
+      alertCounts.temp++;
+      simulateAlert(`⚠️ Temp exceeded (${currentTemp.toFixed(1)}°C)`, 'danger');
+      if (alertCounts.temp >= 3) activateCooling("Temperature");
+    } else { alertCounts.temp = 0; }
+
+    if (currentHumidity > thresholds.humidityMax) {
+      alertCounts.humidity++;
+      simulateAlert(`⚠️ Humidity exceeded (${currentHumidity.toFixed(1)}%)`, 'danger');
+      if (alertCounts.humidity >= 3) activateCooling("Humidity");
+    } else { alertCounts.humidity = 0; }
+
+    if (currentVibration > thresholds.vibrationMax) {
+      alertCounts.vibration++;
+      simulateAlert(`⚠️ Vibration exceeded (${currentVibration.toFixed(2)} m/s²)`, 'danger');
+      if (alertCounts.vibration >= 3) activateCooling("Vibration");
+    } else { alertCounts.vibration = 0; }
+
+    // Update waveform
+    const now = new Date().toLocaleTimeString();
+    dataChart.data.labels.push(now);
+    dataChart.data.datasets[0].data.push(currentTemp);
+    dataChart.data.datasets[1].data.push(currentHumidity);
+    dataChart.data.datasets[2].data.push(currentVibration);
+
+    if (dataChart.data.labels.length > 5) {
+      dataChart.data.labels.shift();
+      dataChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+
+    dataChart.update();
+  }
+
+  setInterval(simulateSensors, 1000);
+
+  // 🔹 Vibration sudden deflections (on click/double-click)
+  const vibrationCanvas = document.getElementById('vibrationGauge');
+
+  // Single click → sudden jump 2000
+  vibrationCanvas.addEventListener('click', () => {
+    currentVibration = 2000;
+    vibrationGauge.data.datasets[0].data[0] = currentVibration;
+    vibrationGauge.data.datasets[0].data[1] = 5000 - currentVibration;
+    vibrationGauge.update();
+    simulateAlert("🔧 Vibration sudden deflection (0 → 2000 m/s²)", "warning");
+  });
+
+  // Double click → sudden jump 4000
+  vibrationCanvas.addEventListener('dblclick', () => {
+    currentVibration = 4000;
+    vibrationGauge.data.datasets[0].data[0] = currentVibration;
+    vibrationGauge.data.datasets[0].data[1] = 5000 - currentVibration;
+    vibrationGauge.update();
+    simulateAlert("🔧 Vibration extreme deflection (0 → 4000 m/s²)", "danger");
+  });
+
+  // Logout
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    localStorage.setItem('loggedIn', 'false');
+    window.location.href = 'login.html';
+  });
+});
+// ---------------------------
+// 🌍 Device Live Location (Leaflet / OpenStreetMap)
+// ---------------------------
+const map = L.map('map').setView([20.5937, 78.9629], 5); // Default: India center
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+let marker = L.marker([20.5937, 78.9629]).addTo(map).bindPopup("Default Location").openPopup();
+
+// Track live location
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const location = [lat, lng];
+      map.setView(location, 14);
+      marker.setLatLng(location).bindPopup("📍 Your Laptop Location").openPopup();
+    },
+    (err) => {
+      console.error("Error getting location:", err);
+      document.getElementById("map").innerHTML = "❌ Location access denied or unavailable.";
+    }
+  );
+} else {
+  document.getElementById("map").innerHTML = "❌ Geolocation not supported.";
+}
